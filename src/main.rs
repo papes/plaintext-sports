@@ -140,6 +140,18 @@ async fn main() -> Result<()> {
                 }
             }
         }
+        
+        // Fetch detailed stats
+        info!("Fetching detailed stats for game ID: {}", game_id);
+        match mlb::get_game_stats(game_id as u32).await {
+            Ok(stats) => {
+                println!("\nDetailed Statistics:");
+                println!("{}", stats);
+            }
+            Err(e) => {
+                println!("Error fetching detailed game stats: {}", e);
+            }
+        }
     }
 
     // Handle today's games request
@@ -159,17 +171,6 @@ async fn main() -> Result<()> {
                         
                         // Only fetch detailed stats for completed games
                         if game.status.abstract_game_state == "Final" {
-                            info!("Fetching detailed stats for game ID: {}", game.game_pk);
-                            match mlb::get_game_stats(game.game_pk).await {
-                                Ok(stats) => {
-                                    println!("\nDetailed Statistics:");
-                                    println!("{}", stats);
-                                }
-                                Err(e) => {
-                                    println!("Error fetching detailed game stats: {}", e);
-                                }
-                            }
-                            
                             // Fetch inning-by-inning breakdown if --innings flag is provided
                             if args.innings {
                                 info!("Fetching inning-by-inning breakdown for game ID: {}", game.game_pk);
@@ -181,6 +182,17 @@ async fn main() -> Result<()> {
                                     Err(e) => {
                                         println!("Error fetching innings data: {}", e);
                                     }
+                                }
+                            }
+                            
+                            info!("Fetching detailed stats for game ID: {}", game.game_pk);
+                            match mlb::get_game_stats(game.game_pk).await {
+                                Ok(stats) => {
+                                    println!("\nDetailed Statistics:");
+                                    println!("{}", stats);
+                                }
+                                Err(e) => {
+                                    println!("Error fetching detailed game stats: {}", e);
                                 }
                             }
                         } else {

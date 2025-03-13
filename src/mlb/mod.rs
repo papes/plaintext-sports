@@ -192,8 +192,8 @@ pub struct TeamStats {
     pub team_name: String,
     pub batting: BattingStats,
     pub pitching: PitchingStats,
-    pub top_batters: Vec<PlayerBattingStats>,
-    pub top_pitchers: Vec<PlayerPitchingStats>,
+    pub batters: Vec<PlayerBattingStats>,
+    pub pitchers: Vec<PlayerPitchingStats>,
 }
 
 /// Batting statistics
@@ -231,6 +231,15 @@ pub struct PlayerBattingStats {
     pub at_bats: u32,
     pub home_runs: u32,
     pub rbi: u32,
+    pub runs: u32,
+    pub doubles: u32,
+    pub triples: u32,
+    pub stolen_bases: u32,
+    pub walks: u32,
+    pub strikeouts: u32,
+    pub avg: Option<String>,
+    pub obp: Option<String>,
+    pub slg: Option<String>,
 }
 
 /// Player pitching statistics
@@ -240,6 +249,11 @@ pub struct PlayerPitchingStats {
     pub innings_pitched: String,
     pub strikeouts: u32,
     pub earned_runs: u32,
+    pub hits_allowed: u32,
+    pub runs_allowed: u32,
+    pub walks: u32,
+    pub home_runs_allowed: u32,
+    pub era: Option<String>,
 }
 
 /// Inning data with runs scored per inning
@@ -621,7 +635,7 @@ impl MlbApi {
             PitchingStats::default()
         };
         
-        // Extract notable players
+        // Extract all batters
         let mut batters = Vec::new();
         if let Some(players) = team_data.get("players").and_then(|p| p.as_object()) {
             for (_, player_data) in players {
@@ -632,32 +646,41 @@ impl MlbApi {
                         let at_bats = stats["atBats"].as_u64().unwrap_or(0) as u32;
                         let home_runs = stats["homeRuns"].as_u64().unwrap_or(0) as u32;
                         let rbi = stats["rbi"].as_u64().unwrap_or(0) as u32;
+                        let runs = stats["runs"].as_u64().unwrap_or(0) as u32;
+                        let doubles = stats["doubles"].as_u64().unwrap_or(0) as u32;
+                        let triples = stats["triples"].as_u64().unwrap_or(0) as u32;
+                        let stolen_bases = stats["stolenBases"].as_u64().unwrap_or(0) as u32;
+                        let walks = stats["baseOnBalls"].as_u64().unwrap_or(0) as u32;
+                        let strikeouts = stats["strikeOuts"].as_u64().unwrap_or(0) as u32;
+                        let avg = stats["avg"].as_str().map(String::from);
+                        let obp = stats["obp"].as_str().map(String::from);
+                        let slg = stats["slg"].as_str().map(String::from);
                         
-                        if hits > 0 || home_runs > 0 || rbi > 0 {
-                            batters.push(PlayerBattingStats {
-                                name: player_name,
-                                hits,
-                                at_bats,
-                                home_runs,
-                                rbi,
-                            });
-                        }
+                        batters.push(PlayerBattingStats {
+                            name: player_name,
+                            hits,
+                            at_bats,
+                            home_runs,
+                            rbi,
+                            runs,
+                            doubles,
+                            triples,
+                            stolen_bases,
+                            walks,
+                            strikeouts,
+                            avg,
+                            obp,
+                            slg,
+                        });
                     }
                 }
             }
         }
         
-        // Sort batters by hits, then home runs, then RBIs
-        batters.sort_by(|a, b| {
-            b.hits.cmp(&a.hits)
-                .then(b.home_runs.cmp(&a.home_runs))
-                .then(b.rbi.cmp(&a.rbi))
-        });
+        // Sort batters by batting order or position
+        batters.sort_by(|a, b| a.name.cmp(&b.name));
         
-        // Take top 3 batters
-        let top_batters = batters.into_iter().take(3).collect();
-        
-        // Extract pitchers
+        // Extract all pitchers
         let mut pitchers = Vec::new();
         if let Some(players) = team_data.get("players").and_then(|p| p.as_object()) {
             for (_, player_data) in players {
@@ -667,34 +690,41 @@ impl MlbApi {
                         let innings_pitched = stats["inningsPitched"].as_str().unwrap_or("0").to_string();
                         let strikeouts = stats["strikeOuts"].as_u64().unwrap_or(0) as u32;
                         let earned_runs = stats["earnedRuns"].as_u64().unwrap_or(0) as u32;
+                        let hits_allowed = stats["hits"].as_u64().unwrap_or(0) as u32;
+                        let runs_allowed = stats["runs"].as_u64().unwrap_or(0) as u32;
+                        let walks = stats["baseOnBalls"].as_u64().unwrap_or(0) as u32;
+                        let home_runs_allowed = stats["homeRuns"].as_u64().unwrap_or(0) as u32;
+                        let era = stats["era"].as_str().map(String::from);
                         
                         pitchers.push(PlayerPitchingStats {
                             name: player_name,
                             innings_pitched,
                             strikeouts,
                             earned_runs,
+                            hits_allowed,
+                            runs_allowed,
+                            walks,
+                            home_runs_allowed,
+                            era,
                         });
                     }
                 }
             }
         }
         
-        // Sort pitchers by innings pitched
+        // Sort pitchers by innings pitched (most to least)
         pitchers.sort_by(|a, b| {
-            let a_ip = a.innings_pitched.parse::<f32>().unwrap_or(0.0);
-            let b_ip = b.innings_pitched.parse::<f32>().unwrap_or(0.0);
+            let a_ip = parse_innings_pitched(&a.innings_pitched);
+            let b_ip = parse_innings_pitched(&b.innings_pitched);
             b_ip.partial_cmp(&a_ip).unwrap_or(std::cmp::Ordering::Equal)
         });
-        
-        // Take top 2 pitchers
-        let top_pitchers = pitchers.into_iter().take(2).collect();
         
         Ok(TeamStats {
             team_name,
             batting: batting_stats,
             pitching: pitching_stats,
-            top_batters,
-            top_pitchers,
+            batters,
+            pitchers,
         })
     }
 
@@ -829,8 +859,8 @@ impl Default for PitchingStats {
 
 impl fmt::Display for GameStats {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "AWAY: {}", self.away_team_stats)?;
         writeln!(f, "HOME: {}", self.home_team_stats)?;
+        writeln!(f, "AWAY: {}", self.away_team_stats)?;
         Ok(())
     }
 }
@@ -841,16 +871,26 @@ impl fmt::Display for TeamStats {
         writeln!(f, "  BATTING: {}", self.batting)?;
         writeln!(f, "  PITCHING: {}", self.pitching)?;
         
-        if !self.top_batters.is_empty() {
-            writeln!(f, "  TOP BATTERS:")?;
-            for batter in &self.top_batters {
+        if !self.batters.is_empty() {
+            writeln!(f, "  BATTERS:")?;
+            // Print header
+            writeln!(f, "    {:<25} {:<7} {:<3} {:<3} {:<3} {:<3} {:<5} {:<5} {:<5}", 
+                "NAME", "AB", "H", "R", "HR", "RBI", "AVG", "OBP", "SLG")?;
+            writeln!(f, "    {}", "-".repeat(70))?;
+            
+            for batter in &self.batters {
                 writeln!(f, "    {}", batter)?;
             }
         }
         
-        if !self.top_pitchers.is_empty() {
-            writeln!(f, "  TOP PITCHERS:")?;
-            for pitcher in &self.top_pitchers {
+        if !self.pitchers.is_empty() {
+            writeln!(f, "  PITCHERS:")?;
+            // Print header
+            writeln!(f, "    {:<25} {:<5} {:<3} {:<3} {:<3} {:<3} {:<3} {:<5}", 
+                "NAME", "IP", "H", "R", "ER", "BB", "K", "ERA")?;
+            writeln!(f, "    {}", "-".repeat(60))?;
+            
+            for pitcher in &self.pitchers {
                 writeln!(f, "    {}", pitcher)?;
             }
         }
@@ -883,21 +923,85 @@ impl fmt::Display for PitchingStats {
 
 impl fmt::Display for PlayerBattingStats {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Use provided AVG or calculate it
+        let avg = if let Some(ref avg) = self.avg {
+            avg.clone()
+        } else if self.at_bats > 0 {
+            format!(".{:03}", (self.hits as f32 / self.at_bats as f32 * 1000.0).round() as u32)
+                .replace(".000", "---")
+        } else {
+            "---".to_string()
+        };
+        
+        // Use provided OBP or use placeholder
+        let obp = self.obp.clone().unwrap_or_else(|| "---".to_string());
+        
+        // Use provided SLG or use placeholder
+        let slg = self.slg.clone().unwrap_or_else(|| "---".to_string());
+        
         write!(
             f,
-            "{}: {}-for-{} ({} HR, {} RBI)",
-            self.name, self.hits, self.at_bats, self.home_runs, self.rbi
+            "{:<25} {:<7} {:<3} {:<3} {:<3} {:<3} {:<5} {:<5} {:<5}",
+            truncate_name(&self.name, 25),
+            self.at_bats,
+            self.hits,
+            self.runs,
+            self.home_runs,
+            self.rbi,
+            avg,
+            obp,
+            slg
         )
     }
 }
 
 impl fmt::Display for PlayerPitchingStats {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Use provided ERA or calculate it
+        let era = if let Some(ref era) = self.era {
+            era.clone()
+        } else {
+            let ip_float = parse_innings_pitched(&self.innings_pitched);
+            if ip_float > 0.0 {
+                format!("{:.2}", (self.earned_runs as f32 * 9.0) / ip_float)
+            } else {
+                "-.--".to_string()
+            }
+        };
+        
         write!(
             f,
-            "{}: {} IP, {} K, {} ER",
-            self.name, self.innings_pitched, self.strikeouts, self.earned_runs
+            "{:<25} {:<5} {:<3} {:<3} {:<3} {:<3} {:<3} {:<5}",
+            truncate_name(&self.name, 25),
+            self.innings_pitched,
+            self.hits_allowed,
+            self.runs_allowed,
+            self.earned_runs,
+            self.walks,
+            self.strikeouts,
+            era
         )
+    }
+}
+
+// Helper function to truncate player names to fit in display
+fn truncate_name(name: &str, max_len: usize) -> String {
+    if name.len() <= max_len {
+        name.to_string()
+    } else {
+        format!("{}...", &name[0..max_len-3])
+    }
+}
+
+// Helper function to parse innings pitched string to float
+fn parse_innings_pitched(ip: &str) -> f32 {
+    let parts: Vec<&str> = ip.split('.').collect();
+    if parts.len() == 2 {
+        let innings = parts[0].parse::<f32>().unwrap_or(0.0);
+        let fraction = parts[1].parse::<f32>().unwrap_or(0.0) / 3.0;
+        innings + fraction
+    } else {
+        ip.parse::<f32>().unwrap_or(0.0)
     }
 }
 
@@ -1212,13 +1316,22 @@ mod tests {
                     home_runs_allowed: 0,
                     era: "2.00".to_string(),
                 },
-                top_batters: vec![
+                batters: vec![
                     PlayerBattingStats {
                         name: "Test Batter 1".to_string(),
                         hits: 3,
                         at_bats: 4,
                         home_runs: 1,
                         rbi: 2,
+                        runs: 1,
+                        doubles: 1,
+                        triples: 0,
+                        stolen_bases: 1,
+                        walks: 0,
+                        strikeouts: 1,
+                        avg: Some(".750".to_string()),
+                        obp: Some(".750".to_string()),
+                        slg: Some("1.500".to_string()),
                     },
                     PlayerBattingStats {
                         name: "Test Batter 2".to_string(),
@@ -1226,14 +1339,28 @@ mod tests {
                         at_bats: 4,
                         home_runs: 0,
                         rbi: 1,
+                        runs: 1,
+                        doubles: 1,
+                        triples: 0,
+                        stolen_bases: 0,
+                        walks: 0,
+                        strikeouts: 1,
+                        avg: Some(".500".to_string()),
+                        obp: Some(".500".to_string()),
+                        slg: Some(".750".to_string()),
                     },
                 ],
-                top_pitchers: vec![
+                pitchers: vec![
                     PlayerPitchingStats {
                         name: "Test Pitcher 1".to_string(),
                         innings_pitched: "6.0".to_string(),
                         strikeouts: 7,
                         earned_runs: 1,
+                        hits_allowed: 4,
+                        runs_allowed: 1,
+                        walks: 2,
+                        home_runs_allowed: 0,
+                        era: Some("1.50".to_string()),
                     },
                 ],
             },
@@ -1260,21 +1387,35 @@ mod tests {
                     home_runs_allowed: 1,
                     era: "3.00".to_string(),
                 },
-                top_batters: vec![
+                batters: vec![
                     PlayerBattingStats {
                         name: "Test Batter 3".to_string(),
                         hits: 2,
                         at_bats: 4,
                         home_runs: 0,
                         rbi: 1,
+                        runs: 1,
+                        doubles: 1,
+                        triples: 0,
+                        stolen_bases: 0,
+                        walks: 0,
+                        strikeouts: 1,
+                        avg: Some(".500".to_string()),
+                        obp: Some(".500".to_string()),
+                        slg: Some(".750".to_string()),
                     },
                 ],
-                top_pitchers: vec![
+                pitchers: vec![
                     PlayerPitchingStats {
                         name: "Test Pitcher 2".to_string(),
                         innings_pitched: "7.0".to_string(),
                         strikeouts: 5,
                         earned_runs: 3,
+                        hits_allowed: 6,
+                        runs_allowed: 3,
+                        walks: 1,
+                        home_runs_allowed: 1,
+                        era: Some("3.86".to_string()),
                     },
                 ],
             },
@@ -1287,10 +1428,12 @@ mod tests {
         assert!(display.contains("Test Home Team"));
         assert!(display.contains("R: 3, H: 8, HR: 1"));
         assert!(display.contains("IP: 9.0, H: 6, R: 2"));
-        assert!(display.contains("Test Batter 1: 3-for-4 (1 HR, 2 RBI)"));
-        assert!(display.contains("Test Pitcher 1: 6.0 IP, 7 K, 1 ER"));
-        assert!(display.contains("Test Batter 3: 2-for-4 (0 HR, 1 RBI)"));
-        assert!(display.contains("Test Pitcher 2: 7.0 IP, 5 K, 3 ER"));
+        assert!(display.contains("BATTERS:"));
+        assert!(display.contains("PITCHERS:"));
+        assert!(display.contains("Test Batter 1"));
+        assert!(display.contains("Test Pitcher 1"));
+        assert!(display.contains("Test Batter 3"));
+        assert!(display.contains("Test Pitcher 2"));
     }
 
     #[test]
@@ -1396,5 +1539,238 @@ mod tests {
         assert!(display.contains("Status: Final"));
         assert!(display.contains("Awa |  1  0  0  0  2  0  0  0  0  | 3"));
         assert!(display.contains("Hom |  0  2  0  1  0  0  0  0  0  | 3"));
+    }
+
+    #[test]
+    fn print_game_stats_display() {
+        // Create mock game stats
+        let game_stats = GameStats {
+            away_team_stats: TeamStats {
+                team_name: "Test Away Team".to_string(),
+                batting: BattingStats {
+                    runs: 3,
+                    hits: 8,
+                    home_runs: 1,
+                    rbi: 3,
+                    stolen_bases: 2,
+                    avg: ".267".to_string(),
+                    obp: ".333".to_string(),
+                    slg: ".400".to_string(),
+                    ops: ".733".to_string(),
+                },
+                pitching: PitchingStats {
+                    innings_pitched: "9.0".to_string(),
+                    hits_allowed: 6,
+                    runs_allowed: 2,
+                    earned_runs: 2,
+                    walks: 3,
+                    strikeouts: 10,
+                    home_runs_allowed: 0,
+                    era: "2.00".to_string(),
+                },
+                batters: vec![
+                    PlayerBattingStats {
+                        name: "Test Batter 1".to_string(),
+                        hits: 3,
+                        at_bats: 4,
+                        home_runs: 1,
+                        rbi: 2,
+                        runs: 1,
+                        doubles: 1,
+                        triples: 0,
+                        stolen_bases: 1,
+                        walks: 0,
+                        strikeouts: 1,
+                        avg: Some(".750".to_string()),
+                        obp: Some(".750".to_string()),
+                        slg: Some("1.500".to_string()),
+                    },
+                    PlayerBattingStats {
+                        name: "Test Batter 2".to_string(),
+                        hits: 2,
+                        at_bats: 4,
+                        home_runs: 0,
+                        rbi: 1,
+                        runs: 1,
+                        doubles: 1,
+                        triples: 0,
+                        stolen_bases: 0,
+                        walks: 0,
+                        strikeouts: 1,
+                        avg: Some(".500".to_string()),
+                        obp: Some(".500".to_string()),
+                        slg: Some(".750".to_string()),
+                    },
+                ],
+                pitchers: vec![
+                    PlayerPitchingStats {
+                        name: "Test Pitcher 1".to_string(),
+                        innings_pitched: "6.0".to_string(),
+                        strikeouts: 7,
+                        earned_runs: 1,
+                        hits_allowed: 4,
+                        runs_allowed: 1,
+                        walks: 2,
+                        home_runs_allowed: 0,
+                        era: Some("1.50".to_string()),
+                    },
+                ],
+            },
+            home_team_stats: TeamStats {
+                team_name: "Test Home Team".to_string(),
+                batting: BattingStats {
+                    runs: 2,
+                    hits: 6,
+                    home_runs: 0,
+                    rbi: 2,
+                    stolen_bases: 1,
+                    avg: ".222".to_string(),
+                    obp: ".300".to_string(),
+                    slg: ".333".to_string(),
+                    ops: ".633".to_string(),
+                },
+                pitching: PitchingStats {
+                    innings_pitched: "9.0".to_string(),
+                    hits_allowed: 8,
+                    runs_allowed: 3,
+                    earned_runs: 3,
+                    walks: 2,
+                    strikeouts: 8,
+                    home_runs_allowed: 1,
+                    era: "3.00".to_string(),
+                },
+                batters: vec![
+                    PlayerBattingStats {
+                        name: "Test Batter 3".to_string(),
+                        hits: 2,
+                        at_bats: 4,
+                        home_runs: 0,
+                        rbi: 1,
+                        runs: 1,
+                        doubles: 1,
+                        triples: 0,
+                        stolen_bases: 0,
+                        walks: 0,
+                        strikeouts: 1,
+                        avg: Some(".500".to_string()),
+                        obp: Some(".500".to_string()),
+                        slg: Some(".750".to_string()),
+                    },
+                ],
+                pitchers: vec![
+                    PlayerPitchingStats {
+                        name: "Test Pitcher 2".to_string(),
+                        innings_pitched: "7.0".to_string(),
+                        strikeouts: 5,
+                        earned_runs: 3,
+                        hits_allowed: 6,
+                        runs_allowed: 3,
+                        walks: 1,
+                        home_runs_allowed: 1,
+                        era: Some("3.86".to_string()),
+                    },
+                ],
+            },
+        };
+
+        // Create mock game innings
+        let game_innings = GameInnings {
+            game_pk: 1,
+            game_date: "2024-03-28T13:05:00Z".to_string(),
+            status: GameStatus {
+                abstract_game_state: "Final".to_string(),
+                detailed_state: "Final".to_string(),
+            },
+            home_team: Team {
+                id: 1,
+                name: "Home Team".to_string(),
+                team_code: None,
+                file_code: None,
+                team_name: None,
+                location_name: None,
+                short_name: None,
+                abbreviation: None,
+                franchise_name: None,
+                club_name: None,
+                first_year_of_play: None,
+                active: None,
+                venue: None,
+                league: None,
+                division: None,
+            },
+            away_team: Team {
+                id: 2,
+                name: "Away Team".to_string(),
+                team_code: None,
+                file_code: None,
+                team_name: None,
+                location_name: None,
+                short_name: None,
+                abbreviation: None,
+                franchise_name: None,
+                club_name: None,
+                first_year_of_play: None,
+                active: None,
+                venue: None,
+                league: None,
+                division: None,
+            },
+            innings: vec![
+                InningData {
+                    inning: 1,
+                    home: Some(0),
+                    away: Some(1),
+                },
+                InningData {
+                    inning: 2,
+                    home: Some(2),
+                    away: Some(0),
+                },
+                InningData {
+                    inning: 3,
+                    home: Some(0),
+                    away: Some(0),
+                },
+                InningData {
+                    inning: 4,
+                    home: Some(1),
+                    away: Some(0),
+                },
+                InningData {
+                    inning: 5,
+                    home: Some(0),
+                    away: Some(2),
+                },
+                InningData {
+                    inning: 6,
+                    home: Some(0),
+                    away: Some(0),
+                },
+                InningData {
+                    inning: 7,
+                    home: Some(0),
+                    away: Some(0),
+                },
+                InningData {
+                    inning: 8,
+                    home: Some(0),
+                    away: Some(0),
+                },
+                InningData {
+                    inning: 9,
+                    home: Some(0),
+                    away: Some(0),
+                },
+            ],
+            home_runs: Some(3),
+            away_runs: Some(3),
+        };
+
+        // Print the output in the desired order
+        println!("\n=== SAMPLE OUTPUT IN NEW ORDER ===");
+        println!("\nInning-by-Inning Breakdown:");
+        println!("{}", game_innings);
+        println!("\nDetailed Statistics:");
+        println!("{}", game_stats);
     }
 }
