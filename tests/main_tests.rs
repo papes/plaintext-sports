@@ -8,7 +8,9 @@ fn test_cli_help() -> Result<()> {
     cmd.arg("--help");
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("Usage: plaintext-sports [OPTIONS]"));
+        .stdout(predicate::str::contains("Usage: plaintext-sports [OPTIONS] [COMMAND]"))
+        .stdout(predicate::str::contains("MLB related commands"))
+        .stdout(predicate::str::contains("NBA related commands"));
     Ok(())
 }
 
@@ -27,10 +29,10 @@ fn test_cli_no_args() -> Result<()> {
         .success()
         .stdout(predicate::str::contains("Welcome to Plaintext Sports!"))
         .stdout(predicate::str::contains("Usage Examples:"))
-        .stdout(predicate::str::contains("Get player stats:"))
-        .stdout(predicate::str::contains("Get team stats:"))
-        .stdout(predicate::str::contains("Get team schedule:"))
-        .stdout(predicate::str::contains("Get game results:"));
+        .stdout(predicate::str::contains("Get all of today's games (MLB and NBA):"))
+        .stdout(predicate::str::contains("Get all of yesterday's games (MLB and NBA):"))
+        .stdout(predicate::str::contains("MLB Commands:"))
+        .stdout(predicate::str::contains("NBA Commands:"));
     Ok(())
 }
 
@@ -40,7 +42,7 @@ fn test_cli_invalid_command() -> Result<()> {
     cmd.arg("invalid");
     cmd.assert()
         .failure()
-        .stderr(predicate::str::contains("unexpected argument"));
+        .stderr(predicate::str::contains("unrecognized subcommand"));
     Ok(())
 }
 
