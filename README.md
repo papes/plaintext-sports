@@ -14,6 +14,7 @@ A command-line application for plaintext sports.
 - Team schedules with game details
 - Today's MLB and NBA games with detailed statistics
 - Yesterday's MLB and NBA games with detailed statistics
+- League filtering for combined commands (MLB, NBA, or both)
 - Comprehensive game statistics including batting and pitching details for MLB
 - Player statistics for NBA games, ordered by away team followed by home team
 - Clear separation between MLB and NBA commands
@@ -52,11 +53,26 @@ plaintext-sports --name YourName
 # Get all of today's games (MLB and NBA)
 plaintext-sports --todays-games
 
+# Get only MLB games for today
+plaintext-sports --todays-games --leagues MLB
+
+# Get only NBA games for today
+plaintext-sports --todays-games --leagues NBA
+
 # Get all of yesterday's games (MLB and NBA)
 plaintext-sports --yesterday-games
 
+# Get only MLB games from yesterday
+plaintext-sports --yesterday-games --leagues MLB
+
+# Get only NBA games from yesterday
+plaintext-sports --yesterday-games --leagues NBA
+
 # Get all of today's games with detailed stats
 plaintext-sports --todays-games --detailed-stats
+
+# Get only MLB games for today with detailed stats
+plaintext-sports --todays-games --leagues MLB --detailed-stats
 
 # MLB Commands
 # -----------
@@ -202,7 +218,11 @@ To run the application in development mode:
 ```bash
 cargo run -- --name YourName
 cargo run -- --todays-games
+cargo run -- --todays-games --leagues MLB
+cargo run -- --todays-games --leagues NBA
 cargo run -- --yesterday-games
+cargo run -- --yesterday-games --leagues MLB
+cargo run -- --yesterday-games --leagues NBA
 cargo run -- mlb player --id 547989
 cargo run -- mlb team --id 145 --schedule
 cargo run -- mlb todays-games

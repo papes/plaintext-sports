@@ -28,6 +28,10 @@ struct Args {
     #[clap(long)]
     yesterday_games: bool,
 
+    /// Filter games by leagues (e.g., --leagues MLB NBA)
+    #[clap(long, value_delimiter = ' ')]
+    leagues: Option<Vec<String>>,
+
     /// Start date for schedule (YYYY-MM-DD)
     #[clap(long)]
     start_date: Option<String>,
@@ -126,185 +130,197 @@ async fn main() -> Result<()> {
         info!("Welcome to Plaintext Sports!");
     }
 
+    // Determine which leagues to fetch based on the leagues argument
+    let fetch_mlb = args.leagues.as_ref().map_or(true, |leagues| leagues.iter().any(|l| l.to_uppercase() == "MLB"));
+    let fetch_nba = args.leagues.as_ref().map_or(true, |leagues| leagues.iter().any(|l| l.to_uppercase() == "NBA"));
+
     // Handle combined commands
     if args.todays_games {
-        info!("Fetching all games scheduled for today (MLB and NBA)");
+        info!("Fetching today's games for selected leagues");
         
-        // Fetch MLB games
-        match mlb::get_todays_games().await {
-            Ok(games) => {
-                println!("\nToday's MLB Games:");
-                if games.is_empty() {
-                    println!("No MLB games scheduled for today.");
-                } else {
-                    for (i, game) in games.iter().enumerate() {
-                        println!("\n==================================================");
-                        println!("Game {}: ID {}", i + 1, game.game_pk);
-                        println!("==================================================");
-                        println!("{}", game);
-                        
-                        // Only fetch data for completed games
-                        if game.status.abstract_game_state == "Final" {
-                            // Always fetch inning-by-inning breakdown by default
-                            info!("Fetching inning-by-inning breakdown for game ID: {}", game.game_pk);
-                            match mlb::get_game_innings(game.game_pk).await {
-                                Ok(innings_data) => {
-                                    println!("\nInning-by-Inning Breakdown:");
-                                    println!("{}", innings_data);
-                                }
-                                Err(e) => {
-                                    println!("Error fetching innings data: {}", e);
-                                }
-                            }
+        // Fetch MLB games if selected
+        if fetch_mlb {
+            match mlb::get_todays_games().await {
+                Ok(games) => {
+                    println!("\nToday's MLB Games:");
+                    if games.is_empty() {
+                        println!("No MLB games scheduled for today.");
+                    } else {
+                        for (i, game) in games.iter().enumerate() {
+                            println!("\n==================================================");
+                            println!("Game {}: ID {}", i + 1, game.game_pk);
+                            println!("==================================================");
+                            println!("{}", game);
                             
-                            // Only fetch detailed stats if the flag is provided
-                            if args.detailed_stats {
-                                info!("Fetching detailed stats for game ID: {}", game.game_pk);
-                                match mlb::get_game_stats(game.game_pk).await {
-                                    Ok(stats) => {
-                                        println!("\nDetailed Statistics:");
-                                        println!("{}", stats);
+                            // Only fetch data for completed games
+                            if game.status.abstract_game_state == "Final" {
+                                // Always fetch inning-by-inning breakdown by default
+                                info!("Fetching inning-by-inning breakdown for game ID: {}", game.game_pk);
+                                match mlb::get_game_innings(game.game_pk).await {
+                                    Ok(innings_data) => {
+                                        println!("\nInning-by-Inning Breakdown:");
+                                        println!("{}", innings_data);
                                     }
                                     Err(e) => {
-                                        println!("Error fetching detailed game stats: {}", e);
+                                        println!("Error fetching innings data: {}", e);
                                     }
                                 }
+                                
+                                // Only fetch detailed stats if the flag is provided
+                                if args.detailed_stats {
+                                    info!("Fetching detailed stats for game ID: {}", game.game_pk);
+                                    match mlb::get_game_stats(game.game_pk).await {
+                                        Ok(stats) => {
+                                            println!("\nDetailed Statistics:");
+                                            println!("{}", stats);
+                                        }
+                                        Err(e) => {
+                                            println!("Error fetching detailed game stats: {}", e);
+                                        }
+                                    }
+                                }
+                            } else {
+                                println!("\nDetailed information not available for games that haven't been completed.");
                             }
-                        } else {
-                            println!("\nDetailed information not available for games that haven't been completed.");
                         }
                     }
                 }
-            }
-            Err(e) => {
-                println!("Error fetching today's MLB games: {}", e);
+                Err(e) => {
+                    println!("Error fetching today's MLB games: {}", e);
+                }
             }
         }
         
-        // Fetch NBA games
-        match nba::get_todays_games().await {
-            Ok(games) => {
-                println!("\nToday's NBA Games:");
-                if games.is_empty() {
-                    println!("No NBA games scheduled for today.");
-                } else {
-                    for (i, game) in games.iter().enumerate() {
-                        println!("\n==================================================");
-                        println!("Game {}: ID {}", i + 1, game.id);
-                        println!("==================================================");
-                        println!("{}", game);
-                        
-                        // Fetch player stats for completed games
-                        if game.status == "Final" {
-                            info!("Fetching player stats for NBA game ID: {}", game.id);
-                            match nba::get_game_player_stats(game.id).await {
-                                Ok(stats) => {
-                                    println!("\nPlayer Statistics:");
-                                    println!("{}", nba::display_game_player_stats(game.id, &stats));
+        // Fetch NBA games if selected
+        if fetch_nba {
+            match nba::get_todays_games().await {
+                Ok(games) => {
+                    println!("\nToday's NBA Games:");
+                    if games.is_empty() {
+                        println!("No NBA games scheduled for today.");
+                    } else {
+                        for (i, game) in games.iter().enumerate() {
+                            println!("\n==================================================");
+                            println!("Game {}: ID {}", i + 1, game.id);
+                            println!("==================================================");
+                            println!("{}", game);
+                            
+                            // Fetch player stats for completed games
+                            if game.status == "Final" {
+                                info!("Fetching player stats for NBA game ID: {}", game.id);
+                                match nba::get_game_player_stats(game.id).await {
+                                    Ok(stats) => {
+                                        println!("\nPlayer Statistics:");
+                                        println!("{}", nba::display_game_player_stats(game.id, &stats));
+                                    }
+                                    Err(e) => {
+                                        println!("Error fetching player stats: {}", e);
+                                    }
                                 }
-                                Err(e) => {
-                                    println!("Error fetching player stats: {}", e);
-                                }
+                            } else {
+                                println!("\nDetailed player statistics not available for games that haven't been completed.");
                             }
-                        } else {
-                            println!("\nDetailed player statistics not available for games that haven't been completed.");
                         }
                     }
                 }
-            }
-            Err(e) => {
-                println!("Error fetching today's NBA games: {}", e);
+                Err(e) => {
+                    println!("Error fetching today's NBA games: {}", e);
+                }
             }
         }
     }
 
     if args.yesterday_games {
-        info!("Fetching all games from yesterday (MLB and NBA)");
+        info!("Fetching yesterday's games for selected leagues");
         
-        // Fetch MLB games from yesterday
-        match mlb::get_yesterdays_games().await {
-            Ok(games) => {
-                println!("\nYesterday's MLB Games:");
-                if games.is_empty() {
-                    println!("No MLB games played yesterday.");
-                } else {
-                    for (i, game) in games.iter().enumerate() {
-                        println!("\n==================================================");
-                        println!("Game {}: ID {}", i + 1, game.game_pk);
-                        println!("==================================================");
-                        println!("{}", game);
-                        
-                        // Only fetch data for completed games
-                        if game.status.abstract_game_state == "Final" {
-                            // Always fetch inning-by-inning breakdown by default
-                            info!("Fetching inning-by-inning breakdown for game ID: {}", game.game_pk);
-                            match mlb::get_game_innings(game.game_pk).await {
-                                Ok(innings_data) => {
-                                    println!("\nInning-by-Inning Breakdown:");
-                                    println!("{}", innings_data);
-                                }
-                                Err(e) => {
-                                    println!("Error fetching innings data: {}", e);
-                                }
-                            }
+        // Fetch MLB games from yesterday if selected
+        if fetch_mlb {
+            match mlb::get_yesterdays_games().await {
+                Ok(games) => {
+                    println!("\nYesterday's MLB Games:");
+                    if games.is_empty() {
+                        println!("No MLB games played yesterday.");
+                    } else {
+                        for (i, game) in games.iter().enumerate() {
+                            println!("\n==================================================");
+                            println!("Game {}: ID {}", i + 1, game.game_pk);
+                            println!("==================================================");
+                            println!("{}", game);
                             
-                            // Only fetch detailed stats if the flag is provided
-                            if args.detailed_stats {
-                                info!("Fetching detailed stats for game ID: {}", game.game_pk);
-                                match mlb::get_game_stats(game.game_pk).await {
-                                    Ok(stats) => {
-                                        println!("\nDetailed Statistics:");
-                                        println!("{}", stats);
+                            // Only fetch data for completed games
+                            if game.status.abstract_game_state == "Final" {
+                                // Always fetch inning-by-inning breakdown by default
+                                info!("Fetching inning-by-inning breakdown for game ID: {}", game.game_pk);
+                                match mlb::get_game_innings(game.game_pk).await {
+                                    Ok(innings_data) => {
+                                        println!("\nInning-by-Inning Breakdown:");
+                                        println!("{}", innings_data);
                                     }
                                     Err(e) => {
-                                        println!("Error fetching detailed game stats: {}", e);
+                                        println!("Error fetching innings data: {}", e);
                                     }
                                 }
+                                
+                                // Only fetch detailed stats if the flag is provided
+                                if args.detailed_stats {
+                                    info!("Fetching detailed stats for game ID: {}", game.game_pk);
+                                    match mlb::get_game_stats(game.game_pk).await {
+                                        Ok(stats) => {
+                                            println!("\nDetailed Statistics:");
+                                            println!("{}", stats);
+                                        }
+                                        Err(e) => {
+                                            println!("Error fetching detailed game stats: {}", e);
+                                        }
+                                    }
+                                }
+                            } else {
+                                println!("\nDetailed information not available for games that haven't been completed.");
                             }
-                        } else {
-                            println!("\nDetailed information not available for games that haven't been completed.");
                         }
                     }
                 }
-            }
-            Err(e) => {
-                println!("Error fetching yesterday's MLB games: {}", e);
+                Err(e) => {
+                    println!("Error fetching yesterday's MLB games: {}", e);
+                }
             }
         }
         
-        // Fetch NBA games from yesterday
-        match nba::get_yesterdays_games().await {
-            Ok(games) => {
-                println!("\nYesterday's NBA Games:");
-                if games.is_empty() {
-                    println!("No NBA games played yesterday.");
-                } else {
-                    for (i, game) in games.iter().enumerate() {
-                        println!("\n==================================================");
-                        println!("Game {}: ID {}", i + 1, game.id);
-                        println!("==================================================");
-                        println!("{}", game);
-                        
-                        // Fetch player stats for completed games
-                        if game.status == "Final" {
-                            info!("Fetching player stats for NBA game ID: {}", game.id);
-                            match nba::get_game_player_stats(game.id).await {
-                                Ok(stats) => {
-                                    println!("\nPlayer Statistics:");
-                                    println!("{}", nba::display_game_player_stats(game.id, &stats));
+        // Fetch NBA games from yesterday if selected
+        if fetch_nba {
+            match nba::get_yesterdays_games().await {
+                Ok(games) => {
+                    println!("\nYesterday's NBA Games:");
+                    if games.is_empty() {
+                        println!("No NBA games played yesterday.");
+                    } else {
+                        for (i, game) in games.iter().enumerate() {
+                            println!("\n==================================================");
+                            println!("Game {}: ID {}", i + 1, game.id);
+                            println!("==================================================");
+                            println!("{}", game);
+                            
+                            // Fetch player stats for completed games
+                            if game.status == "Final" {
+                                info!("Fetching player stats for NBA game ID: {}", game.id);
+                                match nba::get_game_player_stats(game.id).await {
+                                    Ok(stats) => {
+                                        println!("\nPlayer Statistics:");
+                                        println!("{}", nba::display_game_player_stats(game.id, &stats));
+                                    }
+                                    Err(e) => {
+                                        println!("Error fetching player stats: {}", e);
+                                    }
                                 }
-                                Err(e) => {
-                                    println!("Error fetching player stats: {}", e);
-                                }
+                            } else {
+                                println!("\nDetailed player statistics not available for games that haven't been completed.");
                             }
-                        } else {
-                            println!("\nDetailed player statistics not available for games that haven't been completed.");
                         }
                     }
                 }
-            }
-            Err(e) => {
-                println!("Error fetching yesterday's NBA games: {}", e);
+                Err(e) => {
+                    println!("Error fetching yesterday's NBA games: {}", e);
+                }
             }
         }
     }
@@ -651,7 +667,11 @@ async fn main() -> Result<()> {
     if args.command.is_none() && !args.todays_games && !args.yesterday_games {
         println!("\nUsage Examples:");
         println!("  Get all of today's games (MLB and NBA): plaintext-sports --todays-games");
+        println!("  Get only MLB games for today: plaintext-sports --todays-games --leagues MLB");
+        println!("  Get only NBA games for today: plaintext-sports --todays-games --leagues NBA");
         println!("  Get all of yesterday's games (MLB and NBA): plaintext-sports --yesterday-games");
+        println!("  Get only MLB games from yesterday: plaintext-sports --yesterday-games --leagues MLB");
+        println!("  Get only NBA games from yesterday: plaintext-sports --yesterday-games --leagues NBA");
         println!("  Get all of today's games with detailed stats: plaintext-sports --todays-games --detailed-stats");
         println!("\nMLB Commands:");
         println!("  Get player stats: plaintext-sports mlb player --id 547989");
