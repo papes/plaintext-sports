@@ -81,6 +81,10 @@ enum MLBCommand {
         /// MLB game ID
         #[clap(short, long)]
         id: u64,
+        
+        /// Show detailed pitching and hitting statistics
+        #[clap(long)]
+        detailed_stats: bool,
     },
     /// Get all MLB games being played today
     TodaysGames,
@@ -152,8 +156,12 @@ async fn main() -> Result<()> {
                             println!("==================================================");
                             println!("{}", game);
                             
+                            // Debug the game status
+                            println!("DEBUG: Game status: {:?}, abstract_game_state: '{}'", 
+                                    game.status, game.status.abstract_game_state());
+                            
                             // Only fetch data for completed games
-                            if game.status.abstract_game_state == "Final" {
+                            if game.status.abstract_game_state() == "Final" {
                                 // Always fetch inning-by-inning breakdown by default
                                 info!("Fetching inning-by-inning breakdown for game ID: {}", game.game_pk);
                                 match mlb::get_game_innings(game.game_pk).await {
@@ -166,7 +174,7 @@ async fn main() -> Result<()> {
                                     }
                                 }
                                 
-                                // Only fetch detailed stats if the flag is provided
+                                // Always fetch detailed stats if the flag is provided
                                 if args.detailed_stats {
                                     info!("Fetching detailed stats for game ID: {}", game.game_pk);
                                     match mlb::get_game_stats(game.game_pk).await {
@@ -247,8 +255,12 @@ async fn main() -> Result<()> {
                             println!("==================================================");
                             println!("{}", game);
                             
+                            // Debug the game status
+                            println!("DEBUG: Game status: {:?}, abstract_game_state: '{}'", 
+                                    game.status, game.status.abstract_game_state());
+                            
                             // Only fetch data for completed games
-                            if game.status.abstract_game_state == "Final" {
+                            if game.status.abstract_game_state() == "Final" {
                                 // Always fetch inning-by-inning breakdown by default
                                 info!("Fetching inning-by-inning breakdown for game ID: {}", game.game_pk);
                                 match mlb::get_game_innings(game.game_pk).await {
@@ -261,7 +273,7 @@ async fn main() -> Result<()> {
                                     }
                                 }
                                 
-                                // Only fetch detailed stats if the flag is provided
+                                // Always fetch detailed stats if the flag is provided
                                 if args.detailed_stats {
                                     info!("Fetching detailed stats for game ID: {}", game.game_pk);
                                     match mlb::get_game_stats(game.game_pk).await {
@@ -375,7 +387,7 @@ async fn main() -> Result<()> {
                             }
                         }
                     },
-                    MLBCommand::Game { id } => {
+                    MLBCommand::Game { id, detailed_stats } => {
                         info!("Fetching results for MLB game ID: {}", id);
                         match mlb::get_game(*id).await {
                             Ok(game_data) => {
@@ -399,8 +411,8 @@ async fn main() -> Result<()> {
                             }
                         }
                         
-                        // Only fetch detailed stats if the flag is provided
-                        if args.detailed_stats {
+                        // Always fetch detailed stats if the flag is provided
+                        if *detailed_stats {
                             info!("Fetching detailed statistics for game ID: {}", id);
                             match mlb::get_game_stats(*id as u32).await {
                                 Ok(stats) => {
@@ -427,8 +439,12 @@ async fn main() -> Result<()> {
                                         println!("==================================================");
                                         println!("{}", game);
                                         
+                                        // Debug the game status
+                                        println!("DEBUG: Game status: {:?}, abstract_game_state: '{}'", 
+                                                game.status, game.status.abstract_game_state());
+                                        
                                         // Only fetch data for completed games
-                                        if game.status.abstract_game_state == "Final" {
+                                        if game.status.abstract_game_state() == "Final" {
                                             // Always fetch inning-by-inning breakdown by default
                                             info!("Fetching inning-by-inning breakdown for game ID: {}", game.game_pk);
                                             match mlb::get_game_innings(game.game_pk).await {
@@ -441,7 +457,7 @@ async fn main() -> Result<()> {
                                                 }
                                             }
                                             
-                                            // Only fetch detailed stats if the flag is provided
+                                            // Always fetch detailed stats if the flag is provided
                                             if args.detailed_stats {
                                                 info!("Fetching detailed stats for game ID: {}", game.game_pk);
                                                 match mlb::get_game_stats(game.game_pk).await {
@@ -479,8 +495,12 @@ async fn main() -> Result<()> {
                                         println!("==================================================");
                                         println!("{}", game);
                                         
+                                        // Debug the game status
+                                        println!("DEBUG: Game status: {:?}, abstract_game_state: '{}'", 
+                                                game.status, game.status.abstract_game_state());
+                                        
                                         // Only fetch data for completed games
-                                        if game.status.abstract_game_state == "Final" {
+                                        if game.status.abstract_game_state() == "Final" {
                                             // Always fetch inning-by-inning breakdown by default
                                             info!("Fetching inning-by-inning breakdown for game ID: {}", game.game_pk);
                                             match mlb::get_game_innings(game.game_pk).await {
@@ -493,7 +513,7 @@ async fn main() -> Result<()> {
                                                 }
                                             }
                                             
-                                            // Only fetch detailed stats if the flag is provided
+                                            // Always fetch detailed stats if the flag is provided
                                             if args.detailed_stats {
                                                 info!("Fetching detailed stats for game ID: {}", game.game_pk);
                                                 match mlb::get_game_stats(game.game_pk).await {
