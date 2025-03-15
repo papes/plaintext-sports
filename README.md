@@ -24,7 +24,7 @@ A command-line application for plaintext sports.
 Make sure you have Rust installed on your system. Then:
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/yourusername/plaintext-sports  # Replace with actual repository URL
 cd plaintext-sports
 cargo build --release
 ```
@@ -33,13 +33,15 @@ The binary will be available in `target/release/plaintext-sports`
 
 ## API Keys
 
-This application requires an API key for the balldontlie NBA API. You can obtain a free API key by signing up at [balldontlie.io](https://balldontlie.io/).
+**IMPORTANT**: This application requires an API key for the balldontlie NBA API to use any NBA-related features. You can obtain a free API key by signing up at [balldontlie.io](https://balldontlie.io/).
 
 Once you have your API key, set it as an environment variable:
 
 ```bash
 export NBA_API_KEY="your-api-key-here"
 ```
+
+Without a valid API key, all NBA-related commands will fail with an authentication error.
 
 ## Usage
 
@@ -216,6 +218,10 @@ Some common NBA team IDs:
 To run the application in development mode:
 
 ```bash
+# Install dependencies
+cargo check
+
+# Run with various commands
 cargo run -- --name YourName
 cargo run -- --todays-games
 cargo run -- --todays-games --leagues MLB
@@ -233,6 +239,16 @@ cargo run -- nba todays-games
 # With custom configuration
 MLB_API_BASE_URL="https://alternate-statsapi.mlb.com/api/v1" cargo run -- mlb todays-games
 NBA_API_BASE_URL="https://api.balldontlie.io/v1" NBA_API_KEY="your-api-key-here" cargo run -- nba todays-games
+```
+
+### Running Tests
+
+```bash
+# Run all tests
+cargo test
+
+# Run tests with output
+cargo test -- --nocapture
 ```
 
 ## Data Sources
